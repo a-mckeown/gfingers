@@ -103,12 +103,22 @@ final class FretboardState {
         for s in string ..< Tuning.stringCount {
             muted[s] = false
         }
+        // Next taps plant extra fingers (E-shaped F, etc.), not another barre.
+        barreMode = false
     }
 
     func clear() {
         fingers = []
         muted = Array(repeating: false, count: Tuning.stringCount)
         statusMessage = nil
+    }
+
+    /// `nil` = muted, `0` = open, `>0` = fretted.
+    func currentFrets() -> [Int?] {
+        (0 ..< Tuning.stringCount).map { string in
+            if muted[string] { return nil }
+            return covers(string: string) ?? 0
+        }
     }
 
     /// `nil` mutes the string, `0` is open, a positive number is a fretted finger.
