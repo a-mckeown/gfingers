@@ -103,6 +103,8 @@ final class FretboardState {
         for s in string ..< Tuning.stringCount {
             muted[s] = false
         }
+        // Next taps plant extra fingers (E-shaped F, etc.), not another barre.
+        barreMode = false
     }
 
     func clear() {

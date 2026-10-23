@@ -132,7 +132,7 @@ struct ContentView: View {
     }
 
     private var hint: some View {
-        Text("String letters sit off the neck. After the nut, every fret is the same width. Tap a letter to mute (✕) or ring open (○). Open D: mute E and A, then 2–3–2 on G/B/e.")
+        Text("Barre once (tap a fret), then tap extra notes as single fingers. F major: Barre on fret 1 of low E, then A3, D3, G2. Open D: mute E and A, then 2–3–2 on G/B/e.")
             .font(.caption2)
             .foregroundStyle(.white.opacity(0.45))
             .padding(.horizontal, 16)
