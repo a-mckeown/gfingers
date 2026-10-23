@@ -64,6 +64,36 @@ struct VerifyChords {
         // D/F# (F# in bass)
         check("D/F#", frets: [2, nil, 0, 2, 3, 2], expectPrefix: "D/F♯")
 
+        let capoBoard = FretboardState()
+        capoBoard.capoMode = true
+        capoBoard.tap(string: 0, fret: 2)
+        capoBoard.toggleMute(string: 0)
+        capoBoard.toggleMute(string: 1)
+        capoBoard.tap(string: 3, fret: 4)
+        capoBoard.tap(string: 4, fret: 5)
+        capoBoard.tap(string: 5, fret: 4)
+        let capoSymbol = ChordDetector.read(from: capoBoard).symbol
+        if capoSymbol == "E" || capoSymbol.hasPrefix("E") {
+            print("OK  D shape at capo 2 → \(capoSymbol)")
+        } else {
+            print("FAIL D shape at capo 2 → \(capoSymbol) (wanted E)")
+            failed += 1
+        }
+
+        let capoE = FretboardState()
+        capoE.capoMode = true
+        capoE.tap(string: 0, fret: 1)
+        capoE.tap(string: 1, fret: 3)
+        capoE.tap(string: 2, fret: 3)
+        capoE.tap(string: 3, fret: 2)
+        let capoESymbol = ChordDetector.read(from: capoE).symbol
+        if capoESymbol == "F" || capoESymbol.hasPrefix("F") {
+            print("OK  E shape at capo 1 → \(capoESymbol)")
+        } else {
+            print("FAIL E shape at capo 1 → \(capoESymbol) (wanted F)")
+            failed += 1
+        }
+
         if failed > 0 {
             fputs("\(failed) check(s) failed\n", stderr)
             exit(1)

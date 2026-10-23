@@ -35,18 +35,55 @@ enum GuitarShapes {
         .init(symbol: "G5", qualityName: "G power chord", kind: "Power chord", frets: [3, 5, 5, nil, nil, nil]),
     ]
 
-    static func match(frets played: [Int?]) -> ChordReading? {
+    static func match(frets played: [Int?], capo: Int = 0) -> ChordReading? {
+        let relative: [Int?] = played.map { fret in
+            guard let fret else { return nil }
+            if capo == 0 { return fret }
+            return max(0, fret - capo)
+        }
         for shape in catalog {
-            if matches(shape, played: played) {
+            if matches(shape, played: relative) {
+                let kind = capo == 0 ? shape.kind : "\(shape.kind) · Capo \(capo)"
+                let quality: String
+                if capo == 0 {
+                    quality = shape.qualityName
+                } else if shape.qualityName.contains(",") {
+                    quality = transposeSymbol(shape.symbol, by: capo)
+                } else {
+                    quality = transposeToken(shape.qualityName, by: capo)
+                }
                 return ChordReading(
-                    symbol: shape.symbol,
-                    qualityName: shape.qualityName,
-                    shape: shape.kind,
+                    symbol: transposeSymbol(shape.symbol, by: capo),
+                    qualityName: quality,
+                    shape: kind,
                     notes: notesLabel(frets: played)
                 )
             }
         }
         return nil
+    }
+
+    /// Shifts a leading note name (and a slash bass) by `semitones`.
+    static func transposeSymbol(_ symbol: String, by semitones: Int) -> String {
+        guard semitones != 0 else { return symbol }
+        let parts = symbol.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        return parts.map { transposeToken($0, by: semitones) }.joined(separator: "/")
+    }
+
+    private static func transposeToken(_ token: String, by semitones: Int) -> String {
+        let names = ["C♯", "D♭", "D♯", "E♭", "F♯", "G♭", "G♯", "A♭", "A♯", "B♭", "C#", "Db", "D#", "Eb", "F#", "Gb", "G#", "Ab", "A#", "Bb"]
+        for name in names {
+            if token.hasPrefix(name) {
+                let pc = (Tuning.pitchClass(from: name) + semitones + 120) % 12
+                return Tuning.noteName(pc, flats: Tuning.preferFlats(forRoot: pc)) + token.dropFirst(name.count)
+            }
+        }
+        if let first = token.first, "ABCDEFG".contains(first) {
+            let name = String(first)
+            let pc = (Tuning.pitchClass(from: name) + semitones + 120) % 12
+            return Tuning.noteName(pc, flats: Tuning.preferFlats(forRoot: pc)) + token.dropFirst()
+        }
+        return token
     }
 
     /// Textbook mutes (`nil`) may still be ringing open; other strings must match.

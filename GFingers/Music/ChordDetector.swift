@@ -50,7 +50,7 @@ enum ChordDetector {
     ]
 
     static func read(from state: FretboardState) -> ChordReading {
-        if let named = GuitarShapes.match(frets: state.currentFrets()) {
+        if let named = GuitarShapes.match(frets: state.currentFrets(), capo: state.capoFret ?? 0) {
             return named
         }
 
@@ -132,8 +132,10 @@ enum ChordDetector {
     private static func shapeLabel(state: FretboardState, quality: String) -> String {
         var tags: [String] = []
         if quality == "5" { tags.append("Power chord") }
+        if let capo = state.capoFret { tags.append("Capo \(capo)") }
         if state.fingers.contains(where: { $0.span >= 3 }) { tags.append("Barre") }
-        let hasOpen = state.soundingNotes().contains { $0.fret == 0 }
+        let nut = state.capoFret ?? 0
+        let hasOpen = state.soundingNotes().contains { $0.fret == nut }
         let maxFret = state.soundingNotes().map(\.fret).max() ?? 0
         if hasOpen, maxFret <= 4, !tags.contains("Barre") {
             tags.append("Open")

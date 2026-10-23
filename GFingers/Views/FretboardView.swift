@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct FretboardView: View {
-    @Bindable var state: FretboardState
+    @ObservedObject var state: FretboardState
 
     /// Kept for call-site compatibility; zoom is applied by ContentView.
     var scale: CGFloat = 1
@@ -38,10 +38,20 @@ struct FretboardView: View {
         )
     }
 
+    /// Nut/head on the left; fret 1, then 2 to its right, toward the body.
+    private func fretCellMinX(_ fret: Int) -> CGFloat {
+        nutBarWidth + CGFloat(fret - 1) * cellWidth
+    }
+
+    /// High e at the top of the screen, low E at the bottom.
+    private var stringsTopToBottom: [Int] {
+        Array((0 ..< Tuning.stringCount).reversed())
+    }
+
     /// Labels sit off the wood so they are not mistaken for extra fret space.
     private var muteColumn: some View {
         VStack(spacing: 0) {
-            ForEach(0 ..< Tuning.stringCount, id: \.self) { string in
+            ForEach(stringsTopToBottom, id: \.self) { string in
                 Button {
                     state.toggleMute(string: string)
                 } label: {
@@ -70,8 +80,10 @@ struct FretboardView: View {
 
             stringWires
 
-            // Equal-spaced metal: nut, then a wire after every fret.
+            // Equal-spaced metal: nut on the left, then a wire after every fret.
             nutAndFretWires
+
+            capoBand
 
             fingerGrid
         }
@@ -107,8 +119,8 @@ struct FretboardView: View {
             )
 
             for fret in 1 ... Tuning.fretCount {
-                let x = nutBarWidth + CGFloat(fret) * cellWidth - 1.5
                 let thickness: CGFloat = doubleMarkers.contains(fret) ? 3 : 2
+                let x = fretCellMinX(fret) + cellWidth - thickness
                 let wire = Path(CGRect(x: x, y: 0, width: thickness, height: size.height))
                 context.fill(
                     wire,
@@ -130,10 +142,11 @@ struct FretboardView: View {
     private var stringWires: some View {
         ForEach(0 ..< Tuning.stringCount, id: \.self) { string in
             let thickness = max(1.1, 3.0 - CGFloat(string) * 0.32)
+            let row = CGFloat(Tuning.stringCount - 1 - string)
             Rectangle()
                 .fill(Color(white: 0.82))
                 .frame(width: neckWidth, height: thickness)
-                .offset(y: CGFloat(string) * cellHeight + cellHeight / 2 - thickness / 2)
+                .offset(y: row * cellHeight + cellHeight / 2 - thickness / 2)
         }
         .allowsHitTesting(false)
     }
@@ -145,7 +158,7 @@ struct FretboardView: View {
                     .fill(.white.opacity(0.16))
                     .frame(width: 9, height: 9)
                     .offset(
-                        x: nutBarWidth + CGFloat(fret - 1) * cellWidth + cellWidth / 2 - 4.5,
+                        x: fretCellMinX(fret) + cellWidth / 2 - 4.5,
                         y: neckHeight / 2 - 4.5
                     )
             }
@@ -153,12 +166,40 @@ struct FretboardView: View {
         .allowsHitTesting(false)
     }
 
+    private var capoBand: some View {
+        Group {
+            if let capo = state.capoFret {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.35, green: 0.08, blue: 0.08),
+                                Color(red: 0.18, green: 0.05, blue: 0.05),
+                                Color(red: 0.32, green: 0.09, blue: 0.09),
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .overlay(
+                        Text("CAPO")
+                            .font(.system(size: 8, weight: .heavy))
+                            .foregroundStyle(.white.opacity(0.85))
+                            .rotationEffect(.degrees(-90))
+                    )
+                    .frame(width: cellWidth - 4, height: neckHeight - 4)
+                    .offset(x: fretCellMinX(capo) + 2, y: 2)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
     private var fingerGrid: some View {
         HStack(spacing: 0) {
             Color.clear.frame(width: nutBarWidth)
             ForEach(1 ... Tuning.fretCount, id: \.self) { fret in
                 VStack(spacing: 0) {
-                    ForEach(0 ..< Tuning.stringCount, id: \.self) { string in
+                    ForEach(stringsTopToBottom, id: \.self) { string in
                         Button {
                             state.tap(string: string, fret: fret)
                         } label: {
@@ -191,7 +232,7 @@ struct FretboardView: View {
             ForEach(1 ... Tuning.fretCount, id: \.self) { fret in
                 Text("\(fret)")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(state.capoFret == fret ? Color.red.opacity(0.95) : Color.white.opacity(0.55))
                     .frame(width: cellWidth, height: 16)
             }
         }
@@ -203,7 +244,8 @@ struct FretboardView: View {
 
     private func nutGlyph(for string: Int) -> String {
         if state.muted[string] { return "✕" }
-        if state.covers(string: string) != nil { return "●" }
+        let capo = state.capoFret ?? 0
+        if let stopped = state.fingerFret(on: string), stopped > capo { return "●" }
         return "○"
     }
 }

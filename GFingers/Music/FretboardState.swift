@@ -1,5 +1,5 @@
 import Foundation
-import Observation
+import Combine
 
 struct Finger: Identifiable, Equatable, Hashable {
     var id = UUID()
@@ -21,18 +21,29 @@ struct SoundingNote: Equatable {
     var pitchClass: Int { ((midi % 12) + 12) % 12 }
 }
 
-@Observable
-final class FretboardState {
-    var muted = Array(repeating: false, count: Tuning.stringCount)
-    var fingers: [Finger] = []
-    var barreMode = false
-    var statusMessage: String?
+final class FretboardState: ObservableObject {
+    @Published var muted = Array(repeating: false, count: Tuning.stringCount)
+    @Published var fingers: [Finger] = []
+    @Published var barreMode = false
+    @Published var capoMode = false
+    /// Capo fret, or `nil` when off. Counts as the new nut for sounding notes.
+    @Published var capoFret: Int?
+    @Published var statusMessage: String?
 
-    func covers(string: Int) -> Int? {
+    func fingerFret(on string: Int) -> Int? {
         fingers
             .filter { $0.covers(string: string) }
             .map(\.fret)
             .max()
+    }
+
+    func covers(string: Int) -> Int? {
+        let stopped = fingerFret(on: string)
+        if let capo = capoFret {
+            if let stopped { return max(capo, stopped) }
+            return capo
+        }
+        return stopped
     }
 
     func soundingNotes() -> [SoundingNote] {
@@ -59,8 +70,21 @@ final class FretboardState {
 
     func tap(string: Int, fret: Int) {
         statusMessage = nil
+        if capoMode {
+            placeCapo(at: fret)
+            return
+        }
         if barreMode {
+            if let capo = capoFret, fret <= capo {
+                statusMessage = "That fret is behind the capo."
+                return
+            }
             placeBarre(from: string, fret: fret)
+            return
+        }
+
+        if let capo = capoFret, fret <= capo {
+            statusMessage = "That fret is behind the capo — play above it, or move the capo."
             return
         }
 
@@ -107,9 +131,24 @@ final class FretboardState {
         barreMode = false
     }
 
+    private func placeCapo(at fret: Int) {
+        if capoFret == fret {
+            capoFret = nil
+            capoMode = false
+            return
+        }
+        capoFret = fret
+        fingers.removeAll { $0.fret <= fret }
+        capoMode = false
+        barreMode = false
+    }
+
     func clear() {
         fingers = []
         muted = Array(repeating: false, count: Tuning.stringCount)
+        capoFret = nil
+        capoMode = false
+        barreMode = false
         statusMessage = nil
     }
 
@@ -129,6 +168,9 @@ final class FretboardState {
             guard let fret, fret > 0 else { return nil }
             return Finger(stringIndex: index, fret: fret, span: 1)
         }
+        capoFret = nil
+        capoMode = false
+        barreMode = false
         statusMessage = nil
     }
 }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var board = FretboardState()
+    @StateObject private var board = FretboardState()
     @State private var scale: CGFloat = 1.15
     @State private var pinchBase: CGFloat = 1.15
 
@@ -36,7 +36,6 @@ struct ContentView: View {
             Spacer()
             Button("Clear") {
                 board.clear()
-                board.barreMode = false
             }
             .font(.subheadline.weight(.semibold))
             .padding(.horizontal, 12)
@@ -87,12 +86,25 @@ struct ContentView: View {
 
     private var controls: some View {
         HStack(spacing: 10) {
-            Toggle(isOn: $board.barreMode) {
+            Toggle(isOn: Binding(
+                get: { board.barreMode },
+                set: { board.barreMode = $0; if $0 { board.capoMode = false } }
+            )) {
                 Text("Barre")
                     .font(.subheadline.weight(.semibold))
             }
             .toggleStyle(.button)
             .tint(.orange)
+
+            Toggle(isOn: Binding(
+                get: { board.capoMode },
+                set: { board.capoMode = $0; if $0 { board.barreMode = false } }
+            )) {
+                Text(board.capoFret.map { "Capo \($0)" } ?? "Capo")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .toggleStyle(.button)
+            .tint(.red)
 
             Text("\(board.fingers.count)/4 fingers")
                 .font(.caption.weight(.semibold))
@@ -114,16 +126,22 @@ struct ContentView: View {
     }
 
     private var fretboardScroll: some View {
-        ScrollView([.horizontal, .vertical], showsIndicators: true) {
-            FretboardView(state: board, scale: scale)
-                .padding(16)
+        ScrollViewReader { proxy in
+            ScrollView([.horizontal, .vertical], showsIndicators: true) {
+                FretboardView(state: board, scale: scale)
+                    .padding(16)
+                    .id("headstock")
+            }
+            .onAppear {
+                proxy.scrollTo("headstock", anchor: UnitPoint(x: 0, y: 0))
+            }
         }
         .background(Color.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .padding(.horizontal, 12)
         .simultaneousGesture(
-            MagnifyGesture()
-                .onChanged { value in
-                    scale = min(3.2, max(0.7, pinchBase * value.magnification))
+            MagnificationGesture()
+                .onChanged { magnification in
+                    scale = min(3.2, max(0.7, pinchBase * magnification))
                 }
                 .onEnded { _ in
                     pinchBase = scale
@@ -132,7 +150,7 @@ struct ContentView: View {
     }
 
     private var hint: some View {
-        Text("Barre once (tap a fret), then tap extra notes as single fingers. F major: Barre on fret 1 of low E, then A3, D3, G2. Open D: mute E and A, then 2–3–2 on G/B/e.")
+        Text("Capo: tap a fret to clamp all strings, then play shapes above it (E shape at capo 1 = F). Barre once, then extra fingers. Open D: mute E and A, then 2–3–2 on G/B/e.")
             .font(.caption2)
             .foregroundStyle(.white.opacity(0.45))
             .padding(.horizontal, 16)
