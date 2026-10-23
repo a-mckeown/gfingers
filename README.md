@@ -6,6 +6,10 @@ The Home Screen name is **G-Fingers**. The Xcode project is `GFingers`.
 
 It runs on **iOS 16.7 and later** (including iPhone X). Standard tuning only: E A D G B e.
 
+<p align="center">
+  <img src="docs/g-fingers.jpg" alt="G-Fingers on iPhone: high e on top, nut on the left, three fingers on the neck and the chord name in the HUD" width="320" />
+</p>
+
 ## What you can do
 
 - Plant up to **four fingers** on a 24-fret neck and see the chord name as you go.
