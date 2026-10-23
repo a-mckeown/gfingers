@@ -132,7 +132,7 @@ struct ContentView: View {
     }
 
     private var hint: some View {
-        Text("Tap a string letter to mute (✕) or ring open (○). Tap a fret to plant a finger. Turn Barre on, then tap a fret to lay one finger toward the high E.")
+        Text("Nut is the thick bar, then fret 1. Tap a string letter to mute (✕) or ring open (○). Open D is ✕ ✕ ○ plus fingers on 2, 3, 2 of the D/G/B/e strings.")
             .font(.caption2)
             .foregroundStyle(.white.opacity(0.45))
             .padding(.horizontal, 16)

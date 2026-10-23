@@ -8,14 +8,24 @@ struct FretboardView: View {
 
     private let cellWidth: CGFloat = 52
     private let cellHeight: CGFloat = 42
-    private let nutWidth: CGFloat = 48
+    private let labelWidth: CGFloat = 40
+    private let nutBarWidth: CGFloat = 8
     private let markerFrets: Set<Int> = [3, 5, 7, 9, 15, 17, 19, 21]
     private let doubleMarkers: Set<Int> = [12, 24]
 
+    private var boardWidth: CGFloat {
+        labelWidth + nutBarWidth + CGFloat(Tuning.fretCount) * cellWidth
+    }
+
+    private var boardHeight: CGFloat {
+        CGFloat(Tuning.stringCount) * cellHeight
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .top, spacing: 0) {
-                nutColumn
+                muteColumn
+                nutBar
                 fretGrid
             }
             fretNumbers
@@ -24,8 +34,8 @@ struct FretboardView: View {
         .background(wood, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .scaleEffect(scale, anchor: .topLeading)
         .frame(
-            width: (nutWidth + CGFloat(Tuning.fretCount) * cellWidth + 16) * scale,
-            height: (CGFloat(Tuning.stringCount) * cellHeight + 42) * scale,
+            width: (boardWidth + 16) * scale,
+            height: (boardHeight + 34) * scale,
             alignment: .topLeading
         )
     }
@@ -41,7 +51,8 @@ struct FretboardView: View {
         )
     }
 
-    private var nutColumn: some View {
+    /// String names live left of the nut. ○ / ✕ is open vs muted.
+    private var muteColumn: some View {
         VStack(spacing: 0) {
             ForEach(0 ..< Tuning.stringCount, id: \.self) { string in
                 Button {
@@ -54,13 +65,26 @@ struct FretboardView: View {
                             .font(.caption.weight(.bold))
                     }
                     .foregroundStyle(state.muted[string] ? Color.red.opacity(0.95) : Color.white)
-                    .frame(width: nutWidth, height: cellHeight)
+                    .frame(width: labelWidth, height: cellHeight)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("String \(Tuning.stringNames[string])")
             }
         }
-        .background(Color.white.opacity(0.12))
+    }
+
+    /// The nut is the thick bone/metal bar *before* fret 1.
+    private var nutBar: some View {
+        RoundedRectangle(cornerRadius: 1)
+            .fill(
+                LinearGradient(
+                    colors: [Color(white: 0.95), Color(white: 0.7), Color(white: 0.92)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .frame(width: nutBarWidth, height: boardHeight)
+            .shadow(color: .black.opacity(0.35), radius: 1, x: 1)
     }
 
     private var fretGrid: some View {
@@ -91,15 +115,10 @@ struct FretboardView: View {
             state.tap(string: string, fret: fret)
         } label: {
             ZStack {
-                if string == 0 {
+                if string == 2 {
                     marker(for: fret)
                 }
-                Rectangle()
-                    .fill(Color.clear)
-                Rectangle()
-                    .fill(fretWire)
-                    .frame(width: fret == 1 ? 5 : 1.5)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                Color.clear
                 if let finger = displayedFinger(string: string, fret: fret) {
                     Circle()
                         .fill(Color(red: 0.96, green: 0.74, blue: 0.28))
@@ -109,6 +128,11 @@ struct FretboardView: View {
                         .font(.caption.weight(.heavy))
                         .foregroundStyle(Color(red: 0.22, green: 0.12, blue: 0.05))
                 }
+                // Fret wire is the *right* edge of this fret (after the finger).
+                Rectangle()
+                    .fill(fretWire)
+                    .frame(width: doubleMarkers.contains(fret) ? 3 : 1.5)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
             }
             .frame(width: cellWidth, height: cellHeight)
             .contentShape(Rectangle())
@@ -121,9 +145,8 @@ struct FretboardView: View {
         Group {
             if doubleMarkers.contains(fret) || markerFrets.contains(fret) {
                 Circle()
-                    .fill(.white.opacity(0.14))
-                    .frame(width: 9, height: 9)
-                    .offset(y: cellHeight * 2.5)
+                    .fill(.white.opacity(0.16))
+                    .frame(width: 10, height: 10)
             }
         }
     }
@@ -138,15 +161,14 @@ struct FretboardView: View {
 
     private var fretNumbers: some View {
         HStack(spacing: 0) {
-            Color.clear.frame(width: nutWidth, height: 18)
+            Color.clear.frame(width: labelWidth + nutBarWidth, height: 16)
             ForEach(1 ... Tuning.fretCount, id: \.self) { fret in
                 Text("\(fret)")
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.5))
-                    .frame(width: cellWidth, height: 18)
+                    .foregroundStyle(.white.opacity(0.55))
+                    .frame(width: cellWidth, height: 16)
             }
         }
-        .padding(.top, 4)
     }
 
     private func displayedFinger(string: Int, fret: Int) -> Finger? {

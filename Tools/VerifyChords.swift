@@ -20,6 +20,8 @@ struct VerifyChords {
 
         // Open D: X X 0 2 3 2
         check("Open D", frets: [nil, nil, 0, 2, 3, 2], expectPrefix: "D")
+        // Learner D with unused bass still ringing
+        check("Open D ringing bass", frets: [0, 0, 0, 2, 3, 2], expectPrefix: "D")
         // Open G: 3 2 0 0 0 3
         check("Open G", frets: [3, 2, 0, 0, 0, 3], expectPrefix: "G")
         // Open C: X 3 2 0 1 0

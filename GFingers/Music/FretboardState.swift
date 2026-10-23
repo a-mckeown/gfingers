@@ -111,6 +111,14 @@ final class FretboardState {
         statusMessage = nil
     }
 
+    /// `nil` = muted, `0` = open, `>0` = fretted.
+    func currentFrets() -> [Int?] {
+        (0 ..< Tuning.stringCount).map { string in
+            if muted[string] { return nil }
+            return covers(string: string) ?? 0
+        }
+    }
+
     /// `nil` mutes the string, `0` is open, a positive number is a fretted finger.
     func apply(frets: [Int?]) {
         precondition(frets.count == Tuning.stringCount)

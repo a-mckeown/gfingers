@@ -50,6 +50,10 @@ enum ChordDetector {
     ]
 
     static func read(from state: FretboardState) -> ChordReading {
+        if let named = GuitarShapes.match(frets: state.currentFrets()) {
+            return named
+        }
+
         let notes = state.soundingNotes()
         if notes.isEmpty {
             return ChordReading(
