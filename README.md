@@ -7,7 +7,7 @@ The Home Screen name is **G-Fingers**. The Xcode project is `GFingers`.
 It runs on **iOS 16.7 and later** (including iPhone X). Standard tuning only: E A D G B e.
 
 <p align="center">
-  <img src="docs/g-fingers.jpg" alt="G-Fingers on iPhone naming an open B7, with high e on top and the nut on the left" width="320" />
+  <img src="docs/open-b7.jpg" alt="G-Fingers on iPhone naming an open B7, with high e on top and the nut on the left" width="320" />
 </p>
 
 ## What you can do
