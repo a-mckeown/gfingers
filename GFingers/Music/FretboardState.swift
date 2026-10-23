@@ -28,7 +28,14 @@ final class FretboardState: ObservableObject {
     @Published var capoMode = false
     /// Capo fret, or `nil` when off. Counts as the new nut for sounding notes.
     @Published var capoFret: Int?
+    @Published var isDraggingCapo = false
+    @Published var isDraggingShape = false
     @Published var statusMessage: String?
+
+    /// Sounding frets captured when a shape-drag starts (capo stays put).
+    private var shapeDragOrigin: [Int?]?
+    private var shapeDragOriginFingers: [Finger]?
+    private var shapeDragOriginMuted: [Bool]?
 
     func fingerFret(on string: Int) -> Int? {
         fingers
@@ -135,21 +142,108 @@ final class FretboardState: ObservableObject {
         if capoFret == fret {
             capoFret = nil
             capoMode = false
+            isDraggingCapo = false
             return
         }
-        capoFret = fret
-        fingers.removeAll { $0.fret <= fret }
+        moveCapo(to: fret)
         capoMode = false
         barreMode = false
     }
 
+    /// Slide an existing capo; does not toggle it off.
+    func moveCapo(to fret: Int) {
+        let clamped = min(Tuning.fretCount, max(1, fret))
+        capoFret = clamped
+        fingers.removeAll { $0.fret <= clamped }
+        statusMessage = nil
+    }
+
     func clear() {
+        let alreadyClear = fingers.isEmpty
+            && muted.allSatisfy { !$0 }
+            && capoFret == nil
+            && !capoMode
+            && !barreMode
+            && !isDraggingCapo
+            && !isDraggingShape
+            && statusMessage == nil
+        if alreadyClear { return }
+
         fingers = []
         muted = Array(repeating: false, count: Tuning.stringCount)
         capoFret = nil
         capoMode = false
         barreMode = false
+        isDraggingCapo = false
+        isDraggingShape = false
+        shapeDragOrigin = nil
+        shapeDragOriginFingers = nil
+        shapeDragOriginMuted = nil
         statusMessage = nil
+    }
+
+    func beginShapeDrag() {
+        guard !fingers.isEmpty else { return }
+        shapeDragOrigin = currentFrets()
+        shapeDragOriginFingers = fingers
+        shapeDragOriginMuted = muted
+        isDraggingShape = true
+        statusMessage = nil
+    }
+
+    func dragShape(by delta: Int) {
+        guard let origin = shapeDragOrigin else { return }
+        applyShiftedShape(origin, delta: delta)
+    }
+
+    func endShapeDrag() {
+        shapeDragOrigin = nil
+        shapeDragOriginFingers = nil
+        shapeDragOriginMuted = nil
+        isDraggingShape = false
+    }
+
+    /// Move the same fingers (and any ringing opens) by `delta`. Never invents a barre.
+    private func applyShiftedShape(_ origin: [Int?], delta: Int) {
+        guard let originalFingers = shapeDragOriginFingers, let originalMuted = shapeDragOriginMuted else { return }
+        let nut = capoFret ?? 0
+        let sounding = origin.compactMap { $0 }
+        guard let low = sounding.min(), let high = sounding.max() else { return }
+
+        var shift = delta
+        if low + shift < nut { shift = nut - low }
+        if high + shift > Tuning.fretCount { shift = Tuning.fretCount - high }
+
+        muted = originalMuted
+        if shift == 0 {
+            fingers = originalFingers
+            statusMessage = nil
+            return
+        }
+
+        var next: [Finger] = []
+        for finger in originalFingers {
+            let newFret = finger.fret + shift
+            guard newFret > nut, newFret <= Tuning.fretCount else { continue }
+            var moved = finger
+            moved.fret = newFret
+            next.append(moved)
+        }
+
+        for string in 0 ..< Tuning.stringCount {
+            if originalMuted[string] { continue }
+            if originalFingers.contains(where: { $0.covers(string: string) }) { continue }
+            let newFret = (origin[string] ?? nut) + shift
+            guard newFret > nut, newFret <= Tuning.fretCount else { continue }
+            if next.contains(where: { $0.covers(string: string) }) { continue }
+            if next.count >= Tuning.maxFingers {
+                statusMessage = "Four fingers max — some open strings could not move with the shape."
+                break
+            }
+            next.append(Finger(stringIndex: string, fret: newFret, span: 1))
+        }
+
+        fingers = next
     }
 
     /// `nil` = muted, `0` = open, `>0` = fretted.
@@ -171,6 +265,11 @@ final class FretboardState: ObservableObject {
         capoFret = nil
         capoMode = false
         barreMode = false
+        isDraggingCapo = false
+        isDraggingShape = false
+        shapeDragOrigin = nil
+        shapeDragOriginFingers = nil
+        shapeDragOriginMuted = nil
         statusMessage = nil
     }
 }

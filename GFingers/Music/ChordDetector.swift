@@ -50,7 +50,16 @@ enum ChordDetector {
     ]
 
     static func read(from state: FretboardState) -> ChordReading {
-        if let named = GuitarShapes.match(frets: state.currentFrets(), capo: state.capoFret ?? 0) {
+        let played = state.currentFrets()
+        let capo = state.capoFret ?? 0
+        if let named = GuitarShapes.match(frets: played, capo: capo) {
+            return named
+        }
+        if let named = dTriangleFromFingers(state) {
+            return named
+        }
+        let floor = played.compactMap { $0 }.min() ?? 0
+        if floor > capo, let named = GuitarShapes.match(frets: played, capo: floor) {
             return named
         }
 
@@ -66,7 +75,33 @@ enum ChordDetector {
 
         let pitchClasses = Set(notes.map(\.pitchClass))
         let bass = notes.map(\.midi).min().map { (( $0 % 12) + 12) % 12 }!
+        if let named = openDFamily(pitchClasses, bass: bass) {
+            var reading = named
+            reading.shape = shapeLabel(state: state, quality: "")
+            return reading
+        }
+        var reading = fromPitchClasses(pitchClasses, bass: bass, allowExtraNotes: false)
+        let quality = reading.qualityName.contains("power") ? "5" : ""
+        reading.shape = shapeLabel(state: state, quality: quality)
+        return reading
+    }
 
+    /// Names a chord from pitch classes. `allowExtraNotes` is for messy microphone chroma.
+    static func fromPitchClasses(
+        _ pitchClasses: Set<Int>,
+        bass: Int? = nil,
+        allowExtraNotes: Bool = false
+    ) -> ChordReading {
+        let listedFallback = pitchClasses
+            .sorted()
+            .map { Tuning.noteName($0) }
+            .joined(separator: " · ")
+
+        if pitchClasses.isEmpty {
+            return ChordReading(symbol: "—", qualityName: "", shape: "", notes: "")
+        }
+
+        let bassPC = bass.map { (($0 % 12) + 12) % 12 }
         var best: (score: Int, root: Int, formula: Formula)?
 
         for root in pitchClasses {
@@ -75,10 +110,17 @@ enum ChordDetector {
                 let required = formula.intervals.subtracting(formula.optional)
                 if !required.isSubset(of: intervals) { continue }
                 let unexplained = intervals.subtracting(formula.intervals)
-                if !unexplained.isEmpty { continue }
+                if !unexplained.isEmpty, !allowExtraNotes { continue }
                 let missingOptional = formula.optional.subtracting(intervals).count
                 let matched = formula.intervals.intersection(intervals).count
-                var score = matched * 10 + formula.extraWeight * 3 - missingOptional * 4
+                var score = matched * 10 + formula.extraWeight * 3 - missingOptional * 4 - unexplained.count * 6
+                // Keep plain guitar triads ahead of 11 / 7♭9 labels that fit the same notes.
+                if formula.suffix == "" || formula.suffix == "m" || formula.suffix == "add9" {
+                    score += 16
+                }
+                if formula.suffix == "11" || formula.suffix == "13" || formula.suffix == "7♭9" || formula.suffix == "7♯9" {
+                    score -= 10
+                }
                 if formula.suffix == "5", intervals == [0, 7] || intervals == [0, 7, 0] {
                     score += 8
                 }
@@ -92,28 +134,28 @@ enum ChordDetector {
         }
 
         guard let best else {
-            let flats = Tuning.preferFlats(forRoot: bass)
-            let listed = notes.map { Tuning.noteName($0.pitchClass, flats: flats) }.joined(separator: " · ")
+            let root = bassPC ?? pitchClasses.first!
+            let flats = Tuning.preferFlats(forRoot: root)
             return ChordReading(
                 symbol: "?",
                 qualityName: "No standard chord match yet",
-                shape: shapeLabel(state: state, quality: ""),
-                notes: listed
+                shape: "",
+                notes: pitchClasses.sorted().map { Tuning.noteName($0, flats: flats) }.joined(separator: " · ")
             )
         }
 
         let flats = Tuning.preferFlats(forRoot: best.root)
         var symbol = Tuning.noteName(best.root, flats: flats) + best.formula.suffix
-        if bass != best.root {
-            symbol += "/" + Tuning.noteName(bass, flats: flats)
+        if let bassPC, bassPC != best.root {
+            symbol += "/" + Tuning.noteName(bassPC, flats: flats)
         }
 
-        let listed = uniquePitchNames(notes: notes, root: best.root)
+        let listed = pitchClasses.sorted().map { Tuning.noteName($0, flats: flats) }.joined(separator: " · ")
         return ChordReading(
             symbol: symbol,
             qualityName: Tuning.noteName(best.root, flats: flats) + " " + best.formula.label,
-            shape: shapeLabel(state: state, quality: best.formula.suffix),
-            notes: listed
+            shape: "",
+            notes: listed.isEmpty ? listedFallback : listed
         )
     }
 
@@ -143,5 +185,48 @@ enum ChordDetector {
             tags.append("Fretted")
         }
         return tags.joined(separator: " · ")
+    }
+
+    /// Three adjacent fingers in a 2–3–2 or 3–2–3 cluster are the open D shape.
+    private static func dTriangleFromFingers(_ state: FretboardState) -> ChordReading? {
+        let planted = state.fingers
+            .filter { $0.span == 1 }
+            .sorted { $0.stringIndex < $1.stringIndex }
+        guard planted.count >= 3 else { return nil }
+        for i in 0 ... planted.count - 3 {
+            let a = planted[i]
+            let b = planted[i + 1]
+            let c = planted[i + 2]
+            guard b.stringIndex == a.stringIndex + 1, c.stringIndex == a.stringIndex + 2 else { continue }
+            let textbook = a.fret == 2 && b.fret == 3 && c.fret == 2
+            let inverted = a.fret == 3 && b.fret == 2 && c.fret == 3
+            guard textbook || inverted else { continue }
+            if textbook, a.stringIndex == 3, state.fingerFret(on: 0) == 2 {
+                return ChordReading(
+                    symbol: "D/F♯",
+                    qualityName: "D major, F♯ in the bass",
+                    shape: "Open",
+                    notes: "D · F♯ · A"
+                )
+            }
+            return ChordReading(
+                symbol: "D",
+                qualityName: "D major",
+                shape: "Open",
+                notes: "D · F♯ · A"
+            )
+        }
+        return nil
+    }
+
+    /// D–F♯–A is open D. Ringing E/A must not become A7♭9/E.
+    private static func openDFamily(_ pitchClasses: Set<Int>, bass: Int) -> ChordReading? {
+        let d = 2, fSharp = 6, a = 9
+        guard pitchClasses.isSuperset(of: [d, fSharp, a]) else { return nil }
+        let symbol = bass == fSharp ? "D/F♯" : "D"
+        let quality = bass == fSharp ? "D major, F♯ in the bass" : "D major"
+        let flats = Tuning.preferFlats(forRoot: d)
+        let listed = pitchClasses.sorted().map { Tuning.noteName($0, flats: flats) }.joined(separator: " · ")
+        return ChordReading(symbol: symbol, qualityName: quality, shape: "Open", notes: listed)
     }
 }

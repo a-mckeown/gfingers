@@ -22,6 +22,13 @@ struct VerifyChords {
         check("Open D", frets: [nil, nil, 0, 2, 3, 2], expectPrefix: "D")
         // Learner D with unused bass still ringing
         check("Open D ringing bass", frets: [0, 0, 0, 2, 3, 2], expectPrefix: "D")
+        // Leftover finger on the D string must not become A7♭9/E
+        check("Open D with D-string 2", frets: [0, 0, 2, 2, 3, 2], expectPrefix: "D")
+        check("Open D muted D string", frets: [0, 0, nil, 2, 3, 2], expectPrefix: "D")
+        // 2–3–2 triangle one string too low (D–G–B) still reads as D
+        check("D triangle on D-G-B", frets: [0, 0, 2, 3, 2, 0], expectPrefix: "D")
+        check("D triangle on E-A-D", frets: [2, 3, 2, 0, 0, 0], expectPrefix: "D")
+        check("D triangle pointing at nut", frets: [0, 0, 0, 3, 2, 3], expectPrefix: "D")
         // Open G: 3 2 0 0 0 3
         check("Open G", frets: [3, 2, 0, 0, 0, 3], expectPrefix: "G")
         // Open C: X 3 2 0 1 0
@@ -93,6 +100,32 @@ struct VerifyChords {
             print("FAIL E shape at capo 1 → \(capoESymbol) (wanted F)")
             failed += 1
         }
+
+        let slide = FretboardState()
+        slide.apply(frets: [nil, nil, 0, 2, 3, 2])
+        slide.beginShapeDrag()
+        slide.dragShape(by: 2)
+        let slid = ChordDetector.read(from: slide).symbol
+        if slid == "E" || slid.hasPrefix("E") {
+            print("OK  D shape slid +2 → \(slid)")
+        } else {
+            print("FAIL D shape slid +2 → \(slid) (wanted E)")
+            failed += 1
+        }
+        slide.endShapeDrag()
+
+        let slideF = FretboardState()
+        slideF.apply(frets: [1, 3, 3, 2, 1, 1])
+        slideF.beginShapeDrag()
+        slideF.dragShape(by: 2)
+        let slidF = ChordDetector.read(from: slideF).symbol
+        if slidF == "G" || slidF.hasPrefix("G") {
+            print("OK  F barre slid +2 → \(slidF)")
+        } else {
+            print("FAIL F barre slid +2 → \(slidF) (wanted G)")
+            failed += 1
+        }
+        slideF.endShapeDrag()
 
         if failed > 0 {
             fputs("\(failed) check(s) failed\n", stderr)

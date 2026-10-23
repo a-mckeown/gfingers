@@ -5,6 +5,7 @@ struct FretboardView: View {
 
     /// Kept for call-site compatibility; zoom is applied by ContentView.
     var scale: CGFloat = 1
+    var isListening = false
 
     private let cellWidth: CGFloat = 44
     private let cellHeight: CGFloat = 42
@@ -83,9 +84,9 @@ struct FretboardView: View {
             // Equal-spaced metal: nut on the left, then a wire after every fret.
             nutAndFretWires
 
-            capoBand
-
             fingerGrid
+
+            capoBand
         }
         .frame(width: neckWidth, height: neckHeight)
         .clipped()
@@ -169,29 +170,53 @@ struct FretboardView: View {
     private var capoBand: some View {
         Group {
             if let capo = state.capoFret {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color(red: 0.35, green: 0.08, blue: 0.08),
-                                Color(red: 0.18, green: 0.05, blue: 0.05),
-                                Color(red: 0.32, green: 0.09, blue: 0.09),
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .overlay(
-                        Text("CAPO")
-                            .font(.system(size: 8, weight: .heavy))
-                            .foregroundStyle(.white.opacity(0.85))
-                            .rotationEffect(.degrees(-90))
-                    )
-                    .frame(width: cellWidth - 4, height: neckHeight - 4)
-                    .offset(x: fretCellMinX(capo) + 2, y: 2)
-                    .allowsHitTesting(false)
+                HStack(spacing: 0) {
+                    Color.clear
+                        .frame(width: fretCellMinX(capo) + 2)
+                        .allowsHitTesting(false)
+                    capoHandle
+                    Spacer(minLength: 0)
+                }
             }
         }
+    }
+
+    private var capoHandle: some View {
+        let capo = state.capoFret ?? 1
+        return RoundedRectangle(cornerRadius: 4, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.45, green: 0.12, blue: 0.12),
+                        Color(red: 0.22, green: 0.06, blue: 0.06),
+                        Color(red: 0.40, green: 0.10, blue: 0.10),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .stroke(state.isDraggingCapo ? Color.white : Color.red.opacity(0.95), lineWidth: state.isDraggingCapo ? 3 : 2)
+            )
+            .overlay(
+                Text("CAPO")
+                    .font(.system(size: 8, weight: .heavy))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .rotationEffect(.degrees(-90))
+            )
+            .frame(width: cellWidth - 4, height: neckHeight - 4)
+            .contentShape(Rectangle())
+            .overlay {
+                CapoPanCatcher(
+                    cellWidth: cellWidth,
+                    currentFret: capo,
+                    onBegan: { state.isDraggingCapo = true },
+                    onMoveToFret: { state.moveCapo(to: $0) },
+                    onEnded: { state.isDraggingCapo = false }
+                )
+            }
+            .accessibilityLabel("Capo on fret \(capo), drag to move")
     }
 
     private var fingerGrid: some View {
@@ -201,6 +226,7 @@ struct FretboardView: View {
                 VStack(spacing: 0) {
                     ForEach(stringsTopToBottom, id: \.self) { string in
                         Button {
+                            guard !isListening else { return }
                             state.tap(string: string, fret: fret)
                         } label: {
                             ZStack {
@@ -213,12 +239,23 @@ struct FretboardView: View {
                                     Text("\(state.fingerNumber(for: finger))")
                                         .font(.caption.weight(.heavy))
                                         .foregroundStyle(Color(red: 0.22, green: 0.12, blue: 0.05))
+                                    if !isListening {
+                                        CapoPanCatcher(
+                                            cellWidth: cellWidth,
+                                            currentFret: fret,
+                                            onBegan: { state.beginShapeDrag() },
+                                            onFretDelta: { state.dragShape(by: $0) },
+                                            onEnded: { state.endShapeDrag() }
+                                        )
+                                        .frame(width: 32, height: 32)
+                                    }
                                 }
                             }
                             .frame(width: cellWidth, height: cellHeight)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .allowsHitTesting(state.capoFret.map { fret > $0 } ?? true)
                         .accessibilityLabel("String \(Tuning.stringNames[string]), fret \(fret)")
                     }
                 }

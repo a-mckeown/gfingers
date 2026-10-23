@@ -2,11 +2,35 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var board = FretboardState()
+    @StateObject private var listener = AudioChordListener()
     @State private var scale: CGFloat = 1.15
     @State private var pinchBase: CGFloat = 1.15
 
+    private var voicingTab: String {
+        board.currentFrets().map { fret in
+            guard let fret else { return "x" }
+            return String(fret)
+        }.joined(separator: " ")
+    }
+
     private var reading: ChordReading {
-        ChordDetector.read(from: board)
+        if listener.isListening {
+            return listener.reading ?? ChordReading(
+                symbol: "…",
+                qualityName: listener.statusMessage ?? "Listening for a guitar…",
+                shape: "Listen",
+                notes: ""
+            )
+        }
+        if board.fingers.isEmpty {
+            return ChordReading(
+                symbol: "…",
+                qualityName: "Place a shape, or turn on Listen.",
+                shape: "",
+                notes: ""
+            )
+        }
+        return ChordDetector.read(from: board)
     }
 
     var body: some View {
@@ -22,20 +46,49 @@ struct ContentView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .onDisappear { listener.stop() }
+        .onChange(of: listener.reading?.symbol) { symbol in
+            guard listener.isListening, let symbol else { return }
+            applyListenShape(symbol)
+        }
+    }
+
+    private func applyListenShape(_ symbol: String) {
+        guard let shape = GuitarShapes.voicing(for: symbol) else { return }
+        board.apply(frets: shape.frets)
     }
 
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("gfingers")
+                Text("G-Fingers")
                     .font(.title2.weight(.bold))
                 Text("Place a shape. Hear its name.")
                     .font(.footnote)
                     .foregroundStyle(.white.opacity(0.55))
             }
             Spacer()
+            Toggle(isOn: Binding(
+                get: { listener.isListening },
+                set: { on in
+                    if on {
+                        board.clear()
+                        listener.start()
+                    } else {
+                        listener.stop()
+                    }
+                }
+            )) {
+                Text(listener.isListening ? "Listening" : "Listen")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .toggleStyle(.button)
+            .tint(.green)
+
             Button("Clear") {
-                board.clear()
+                withAnimation(nil) {
+                    board.clear()
+                }
             }
             .font(.subheadline.weight(.semibold))
             .padding(.horizontal, 12)
@@ -71,7 +124,19 @@ struct ContentView: View {
                     .font(.subheadline.monospaced())
                     .foregroundStyle(.white.opacity(0.55))
             }
-            if let status = board.statusMessage {
+            if !listener.isListening, !board.fingers.isEmpty {
+                Text("E A D G B e  \(voicingTab)")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.white.opacity(0.4))
+            }
+            if listener.isListening, let listenStatus = listener.statusMessage {
+                Text(listenStatus)
+                    .font(.caption)
+                    .foregroundStyle(.green)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+            if let status = board.statusMessage, !listener.isListening {
                 Text(status)
                     .font(.caption)
                     .foregroundStyle(.orange)
@@ -128,10 +193,11 @@ struct ContentView: View {
     private var fretboardScroll: some View {
         ScrollViewReader { proxy in
             ScrollView([.horizontal, .vertical], showsIndicators: true) {
-                FretboardView(state: board, scale: scale)
+                FretboardView(state: board, scale: scale, isListening: listener.isListening)
                     .padding(16)
                     .id("headstock")
             }
+            .scrollDisabled(board.isDraggingCapo || board.isDraggingShape)
             .onAppear {
                 proxy.scrollTo("headstock", anchor: UnitPoint(x: 0, y: 0))
             }
@@ -150,7 +216,7 @@ struct ContentView: View {
     }
 
     private var hint: some View {
-        Text("Capo: tap a fret to clamp all strings, then play shapes above it (E shape at capo 1 = F). Barre once, then extra fingers. Open D: mute E and A, then 2–3–2 on G/B/e.")
+        Text("Listen hears a guitar in standard tuning and names the chord. Drag fingers to slide a shape. Capo drags on its own.")
             .font(.caption2)
             .foregroundStyle(.white.opacity(0.45))
             .padding(.horizontal, 16)
